@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import type { AppEnv } from "../env";
-import { check, defect } from "../db/schema";
+import { check, checkPhoto, defect } from "../db/schema";
 import { can } from "../lib/can";
 import { requireMember } from "../lib/middleware";
 import { photoResponse } from "../lib/photos";
@@ -27,6 +27,21 @@ miscRoutes.get("/photos/check/:id", requireMember, async (c) => {
     .get();
   if (!row?.photoKey || !can(c.get("user"), "photo:view", { ownerId: row.driverId })) return c.notFound();
   return (await photoResponse(c.env.PHOTOS, row.photoKey)) ?? c.notFound();
+});
+
+// Any photo saved with a check: for the whole check or for one failed item.
+miscRoutes.get("/photos/item/:id", requireMember, async (c) => {
+  const parsed = idSchema.safeParse(c.req.param("id"));
+  if (!parsed.success) return c.notFound();
+  const row = await c
+    .get("db")
+    .select({ driverId: check.driverId, key: checkPhoto.key })
+    .from(checkPhoto)
+    .innerJoin(check, eq(check.id, checkPhoto.checkId))
+    .where(eq(checkPhoto.id, parsed.data))
+    .get();
+  if (!row || !can(c.get("user"), "photo:view", { ownerId: row.driverId })) return c.notFound();
+  return (await photoResponse(c.env.PHOTOS, row.key)) ?? c.notFound();
 });
 
 miscRoutes.get("/photos/defect/:id", requireMember, async (c) => {

@@ -19,6 +19,7 @@ const MEMBER_GETS = [
   "/account",
   `/photos/check/${someId}`,
   `/photos/defect/${someId}`,
+  `/photos/item/${someId}`,
 ];
 
 const MEMBER_POSTS = [
@@ -284,8 +285,15 @@ describe("failure handling", () => {
     const { browser } = await signedIn("driver");
     const res = await browser.get("/check");
     expect(res.status).toBe(200);
-    const big = await SELFpost(browser, 13 * 1024 * 1024);
-    expect(big.status).toBe(413);
+    // Most forms allow 12 MB; a check allows 60 MB because it can carry several photos.
+    expect((await SELFpost(browser, 13 * 1024 * 1024, "/setup/business")).status).toBe(413);
+    expect((await SELFpost(browser, 61 * 1024 * 1024)).status).toBe(413);
+  });
+
+  it("answers a cut-off upload with a bad request, not a server error", async () => {
+    const { browser } = await signedIn("driver");
+    await browser.get("/check");
+    expect((await SELFpost(browser, 13 * 1024 * 1024)).status).toBe(400);
   });
 
   it("explains a photo that is too big, and keeps the answers", async () => {
@@ -378,10 +386,10 @@ describe("sign in", () => {
 });
 
 /** Posts a body bigger than the upload limit, with an honest content-length. */
-async function SELFpost(browser: Browser, bytes: number): Promise<Response> {
+async function SELFpost(browser: Browser, bytes: number, path = "/check"): Promise<Response> {
   const token = await browser.csrf();
   const body = new Uint8Array(bytes);
-  return exports.default.fetch(`${ORIGIN}/check`, {
+  return exports.default.fetch(`${ORIGIN}${path}`, {
     method: "POST",
     body,
     redirect: "manual",

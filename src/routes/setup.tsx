@@ -9,9 +9,11 @@ import {
   id as idSchema,
   moveSchema,
   roleSchema,
+  templateSchema,
 } from "../lib/validate";
 import {
   addChecklistItem,
+  addChecklistTemplate,
   addStandardChecklist,
   deleteChecklistItem,
   getSettings,
@@ -23,7 +25,7 @@ import {
   updateSettings,
 } from "../services/fleet";
 import { listTeam, setRole } from "../services/team";
-import { PENDING_LABEL, ROLES, roleLabel, STANDARD_CHECKLIST } from "../labels";
+import { CHECKLIST_TEMPLATES, PENDING_LABEL, ROLES, roleLabel, SECTION_SUGGESTIONS } from "../labels";
 import { Alert, btn, Button, Card, Csrf, Field, H1, H2 } from "../views/components";
 import { formBody, render } from "./render";
 
@@ -33,7 +35,8 @@ const messages: Record<string, string> = {
   business: "Business details saved.",
   "item-added": "Checklist item added.",
   standard: "Standard checklist items added.",
-  "standard-none": "The standard items are already on your list.",
+  template: "Checklist items added. Switch off or delete any you do not need.",
+  "standard-none": "Those items are already on your list.",
   "item-saved": "Checklist item saved.",
   "item-deleted": "Checklist item deleted. Past checks keep their own copy.",
   "item-toggled": "Checklist item updated.",
@@ -139,18 +142,21 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
       <Card class="mb-4" id="checklist">
         <H2>Checklist</H2>
         <p class="mb-3 text-sm text-gray-600">
-          Drivers tick these in order. Switched-off items are hidden from new checks. Past checks keep their own copy of
-          the wording.
+          Drivers mark each item Pass, Fail or N/A, grouped by section. Switched-off items are hidden from new checks.
+          Past checks keep their own copy of the wording.
         </p>
         {items.length === 0 ? (
-          <p class="mb-3 text-gray-700">
-            No items yet. Add your own, or start with the {STANDARD_CHECKLIST.length} standard items.
-          </p>
+          <p class="mb-3 text-gray-700">No items yet. Start from a ready-made checklist below, or add your own.</p>
         ) : (
           <ul class="mb-4 divide-y divide-gray-100">
             {items.map((item, index) => (
               <li class="py-3">
-                <form method="post" action={`/setup/checklist/${item.id}`} class="flex gap-2" data-enhance>
+                <form
+                  method="post"
+                  action={`/setup/checklist/${item.id}`}
+                  class="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_11rem_auto]"
+                  data-enhance
+                >
                   <Csrf token={csrf} />
                   <label for={`item-${item.id}`} class="sr-only">
                     Item {index + 1} wording
@@ -161,8 +167,21 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
                     value={item.label}
                     required
                     maxlength={120}
-                    class={`min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2 text-base ${item.active ? "" : "text-gray-400 line-through"}`}
+                    class={`col-span-2 min-w-0 rounded-xl border border-gray-300 px-3 py-2 text-base sm:col-span-1 ${item.active ? "" : "text-gray-400 line-through"}`}
                   />
+                  <div class="flex gap-2">
+                    <label for={`section-${item.id}`} class="sr-only">
+                      Item {index + 1} section
+                    </label>
+                    <input
+                      id={`section-${item.id}`}
+                      name="section"
+                      value={item.section}
+                      maxlength={40}
+                      list="sections"
+                      class="min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm text-gray-700"
+                    />
+                  </div>
                   <Button kind="secondary" class="min-h-10 py-2">
                     Save
                   </Button>
@@ -172,7 +191,8 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
                     c={c}
                     itemId={item.id}
                     path="move"
-                    label="Move up"
+                    label="Up"
+                    ariaLabel={`Move ${item.label} up`}
                     field={["direction", "up"]}
                     disabled={index === 0}
                   />
@@ -180,7 +200,8 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
                     c={c}
                     itemId={item.id}
                     path="move"
-                    label="Move down"
+                    label="Down"
+                    ariaLabel={`Move ${item.label} down`}
                     field={["direction", "down"]}
                     disabled={index === items.length - 1}
                   />
@@ -198,7 +219,17 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
             ))}
           </ul>
         )}
-        <form method="post" action="/setup/checklist" class="flex gap-2" data-enhance>
+        <datalist id="sections">
+          {SECTION_SUGGESTIONS.map((s) => (
+            <option value={s} />
+          ))}
+        </datalist>
+        <form
+          method="post"
+          action="/setup/checklist"
+          class="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_11rem_auto]"
+          data-enhance
+        >
           <Csrf token={csrf} />
           <label for="new-item" class="sr-only">
             New checklist item
@@ -209,13 +240,44 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
             required
             maxlength={120}
             placeholder="New checklist item"
-            class="min-w-0 flex-1 rounded-xl border border-gray-300 px-3 py-2.5 text-base"
+            class="col-span-2 min-w-0 rounded-xl border border-gray-300 px-3 py-2.5 text-base sm:col-span-1"
+          />
+          <label for="new-section" class="sr-only">
+            Section
+          </label>
+          <input
+            id="new-section"
+            name="section"
+            maxlength={40}
+            list="sections"
+            placeholder="Section, for example Tyres and wheels"
+            class="min-w-0 rounded-xl border border-gray-300 px-3 py-2.5 text-sm"
           />
           <Button>Add item</Button>
         </form>
-        <form method="post" action="/setup/checklist/standard" class="mt-3" data-enhance>
+        <form method="post" action="/setup/checklist/template" class="mt-4 rounded-xl bg-canvas/60 p-3" data-enhance>
           <Csrf token={csrf} />
-          <Button kind="ghost">Add the {STANDARD_CHECKLIST.length} standard items</Button>
+          <label for="template" class="mb-1 block text-sm font-semibold">
+            Add a ready-made checklist
+          </label>
+          <p class="mb-2 text-sm text-gray-700">
+            Adds every item with its section. Items already on your list are skipped. Edit or switch off anything you do
+            not need.
+          </p>
+          <div class="flex flex-wrap gap-2">
+            <select
+              id="template"
+              name="template"
+              class="min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-base"
+            >
+              {Object.entries(CHECKLIST_TEMPLATES).map(([key, t]) => (
+                <option value={key}>
+                  {t.name} ({t.items.length} items)
+                </option>
+              ))}
+            </select>
+            <Button kind="secondary">Add checklist</Button>
+          </div>
         </form>
       </Card>
 
@@ -305,6 +367,7 @@ const ItemAction = ({
   disabled,
   danger,
   confirm,
+  ariaLabel,
 }: {
   c: Context<AppEnv>;
   itemId: string;
@@ -314,6 +377,7 @@ const ItemAction = ({
   disabled?: boolean;
   danger?: boolean;
   confirm?: string;
+  ariaLabel?: string;
 }) => (
   <form method="post" action={`/setup/checklist/${itemId}/${path}`} data-enhance>
     <Csrf token={c.get("csrfToken")} />
@@ -322,7 +386,8 @@ const ItemAction = ({
       type="submit"
       disabled={disabled}
       data-confirm={confirm}
-      class={btn(danger ? "danger" : "secondary", "min-h-9 px-3 py-1.5 text-xs")}
+      aria-label={ariaLabel}
+      class={btn(danger ? "danger" : "secondary", "min-h-9 px-2.5 py-1.5 text-xs sm:px-3")}
     >
       {label}
     </button>
@@ -350,7 +415,7 @@ setupRoutes.post("/setup/business", guard, async (c) => {
 setupRoutes.post("/setup/checklist", requirePermission("checklist:edit"), async (c) => {
   const parsed = checklistLabelSchema.safeParse(formValues(await formBody(c)));
   if (!parsed.success) return page(c, firstError(parsed.error), 400);
-  const res = await addChecklistItem(c.get("db"), actor(c), parsed.data.label);
+  const res = await addChecklistItem(c.get("db"), actor(c), parsed.data.label, parsed.data.section);
   if (!res.ok) return page(c, res.message, 400);
   return c.redirect("/setup?m=item-added#checklist", 303);
 });
@@ -361,12 +426,20 @@ setupRoutes.post("/setup/checklist/standard", requirePermission("checklist:edit"
   return c.redirect(`/setup?m=${res.value ? "standard" : "standard-none"}#checklist`, 303);
 });
 
+setupRoutes.post("/setup/checklist/template", requirePermission("checklist:edit"), async (c) => {
+  const parsed = templateSchema.safeParse(formValues(await formBody(c)));
+  if (!parsed.success) return page(c, "Choose a checklist to add.", 400);
+  const res = await addChecklistTemplate(c.get("db"), actor(c), parsed.data.template);
+  if (!res.ok) return page(c, res.message, 400);
+  return c.redirect(`/setup?m=${res.value ? "template" : "standard-none"}#checklist`, 303);
+});
+
 setupRoutes.post("/setup/checklist/:id", requirePermission("checklist:edit"), async (c) => {
   const id = itemId(c);
   if (!id.success) return c.notFound();
   const parsed = checklistLabelSchema.safeParse(formValues(await formBody(c)));
   if (!parsed.success) return page(c, firstError(parsed.error), 400);
-  const res = await renameChecklistItem(c.get("db"), actor(c), id.data, parsed.data.label);
+  const res = await renameChecklistItem(c.get("db"), actor(c), id.data, parsed.data.label, parsed.data.section);
   if (!res.ok) return page(c, res.message, 409);
   return c.redirect("/setup?m=item-saved#checklist", 303);
 });

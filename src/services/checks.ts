@@ -1,29 +1,72 @@
 import { and, asc, desc, eq, gte, lte, sql, type SQL } from "drizzle-orm";
 import type { DB } from "../db/client";
-import { check, checkResult, checklistItem, defect, vehicle, type Check, type CheckResult } from "../db/schema";
+import {
+  check,
+  checkPhoto,
+  checkResult,
+  checklistItem,
+  defect,
+  vehicle,
+  type Check,
+  type CheckPhoto,
+  type CheckResult,
+} from "../db/schema";
 import type { Severity } from "../labels";
 import type { AppUser } from "../env";
 import { can } from "../lib/can";
 import { storePhoto } from "../lib/photos";
 
+/** One answer on the checklist: pass, fail (with a note and how serious it is) or not applicable. */
+export interface ItemAnswer {
+  itemId: string;
+  status: "pass" | "fail" | "na";
+  note: string;
+  /** How serious a failed item is. The driver must choose; null means they did not. */
+  severity: Severity | null;
+}
+
 export interface SubmitInput {
   submissionId: string;
   vehicleId: string;
   odometer: number;
+  /** Older form: the ids of ticked items. Used only when `answers` is empty. */
   ok: string[];
+  /** Other notes. With `reportAnyway`, also the description of an extra problem. */
   notes: string;
+  /** Severity of the extra problem (or of the single defect on the older form). */
   severity: Severity;
   confirmLower: boolean;
   reportAnyway: boolean;
+  /** Current form: one answer per checklist item. */
+  answers?: ItemAnswer[];
 }
 
+/** The older single photo for the whole check. */
 export interface PhotoUpload {
   file: File;
   bucket: R2Bucket;
 }
 
+/** Photos from the current form: some for the check as a whole, some for particular failed items. */
+export interface CheckPhotos {
+  bucket: R2Bucket;
+  overall: File[];
+  byItem: Map<string, File[]>;
+}
+
 export type SubmitResult =
-  | { kind: "saved"; checkId: string; passed: boolean; defectId: string | null; offRoad: boolean; failed: string[] }
+  | {
+      kind: "saved";
+      checkId: string;
+      passed: boolean;
+      /** The first defect raised, kept for callers that only need one. */
+      defectId: string | null;
+      defectIds: string[];
+      offRoad: boolean;
+      failed: string[];
+      /** The most serious defect raised, or null when there were none. */
+      worst: Severity | null;
+    }
   | { kind: "duplicate"; checkId: string }
   | { kind: "odometer_lower"; lastReading: number }
   | { kind: "error"; message: string };
@@ -34,21 +77,29 @@ export function chunk<T>(rows: T[], size: number): T[][] {
   return out;
 }
 
+const SEVERITY_RANK: Record<Severity, number> = { minor: 1, major: 2, critical: 3 };
+export const worstOf = (list: Severity[]): Severity | null =>
+  list.reduce<Severity | null>((w, s) => (w === null || SEVERITY_RANK[s] > SEVERITY_RANK[w] ? s : w), null);
+
 // Only a repeated check id counts as a duplicate. Other constraint failures are real errors.
 const isUniqueViolation = (err: unknown): boolean => {
   const text = `${String(err)} ${err instanceof Error && err.cause instanceof Error ? err.cause.message : ""}`;
   return /UNIQUE constraint failed: check\.id/i.test(text);
 };
 
+const listLabels = (labels: string[]) =>
+  labels.length <= 3 ? labels.join(", ") : `${labels.slice(0, 3).join(", ")} and ${labels.length - 3} more`;
+
 /**
  * Saves a pre-start check. Everything is written in one D1 batch (a single transaction), so a check is never
- * saved without its results, its defect or its vehicle update.
+ * saved without its answers, its defects or its vehicle update. Each failed item becomes its own defect, so the
+ * workshop can fix and close them one at a time.
  */
 export async function submitCheck(
   db: DB,
   actor: AppUser,
   input: SubmitInput,
-  photo: PhotoUpload | null = null,
+  photos: PhotoUpload | CheckPhotos | null = null,
 ): Promise<SubmitResult> {
   if (!can(actor, "check:submit")) return { kind: "error", message: "You do not have access to submit checks." };
 
@@ -76,28 +127,135 @@ export async function submitCheck(
     return { kind: "error", message: "No checklist items are set up yet. Ask an admin to add them on the Setup page." };
   }
 
-  const ticked = new Set(input.ok);
-  const failed = items.filter((i) => !ticked.has(i.id));
-  const passed = failed.length === 0;
   const notes = input.notes.trim();
+  const nowIso = new Date().toISOString();
+  const checkId = input.submissionId;
 
-  if (!passed && notes.length === 0) return { kind: "error", message: "Describe the problem before you submit." };
-  if (passed && input.reportAnyway && notes.length === 0) {
+  // Work out every item's answer, from the current form or the older ticked-items form.
+  const usingAnswers = Boolean(input.answers && input.answers.length > 0);
+  type Row = { item: (typeof items)[number]; status: "pass" | "fail" | "na"; note: string; severity: Severity | null };
+  let rows: Row[];
+  if (usingAnswers) {
+    const byId = new Map((input.answers ?? []).map((a) => [a.itemId, a]));
+    const missing = items.filter((i) => !byId.has(i.id));
+    if (missing.length) {
+      return {
+        kind: "error",
+        message: `Answer every item before you submit. Not answered: ${listLabels(missing.map((i) => i.label))}.`,
+      };
+    }
+    rows = items.map((item) => {
+      const a = byId.get(item.id);
+      const status = a?.status ?? "pass";
+      return {
+        item,
+        status,
+        note: (a?.note ?? "").trim(),
+        severity: status === "fail" ? (a?.severity ?? null) : null,
+      };
+    });
+    const noNote = rows.filter((r) => r.status === "fail" && r.note.length < 2);
+    if (noNote.length) {
+      return { kind: "error", message: `Say what is wrong with: ${listLabels(noNote.map((r) => r.item.label))}.` };
+    }
+    const noSeverity = rows.filter((r) => r.status === "fail" && !r.severity);
+    if (noSeverity.length) {
+      return {
+        kind: "error",
+        message: `Choose how serious it is for: ${listLabels(noSeverity.map((r) => r.item.label))}.`,
+      };
+    }
+  } else {
+    const ticked = new Set(input.ok);
+    rows = items.map((item) => ({ item, status: ticked.has(item.id) ? "pass" : "fail", note: "", severity: null }));
+    const anyFailed = rows.some((r) => r.status === "fail");
+    if (anyFailed && notes.length === 0) return { kind: "error", message: "Describe the problem before you submit." };
+  }
+  const failedRows = rows.filter((r) => r.status === "fail");
+  const passed = failedRows.length === 0;
+  if (input.reportAnyway && notes.length === 0 && (usingAnswers || passed)) {
     return { kind: "error", message: "Describe the problem you want to report." };
   }
 
-  const raiseDefect = !passed || (input.reportAnyway && notes.length > 0);
-  const severity: Severity = raiseDefect ? input.severity : "minor";
-  const defectId = raiseDefect ? crypto.randomUUID() : null;
-  const offRoad = raiseDefect && severity === "critical";
-  const nowIso = new Date().toISOString();
-  const checkId = input.submissionId;
-  // Stored only after every check above has passed, and removed again if the save fails.
-  const photoKey = photo ? await storePhoto(photo.bucket, "checks", photo.file) : null;
+  // Photos are stored only after every check above has passed, and removed again if the save fails.
+  const stored: { key: string; checkResultItemId: string | null }[] = [];
+  const bucket = photos ? photos.bucket : null;
+  try {
+    if (photos && "file" in photos) {
+      stored.push({ key: await storePhoto(photos.bucket, "checks", photos.file), checkResultItemId: null });
+    } else if (photos) {
+      for (const file of photos.overall)
+        stored.push({ key: await storePhoto(photos.bucket, "checks", file), checkResultItemId: null });
+      for (const r of failedRows) {
+        for (const file of photos.byItem.get(r.item.id) ?? []) {
+          stored.push({ key: await storePhoto(photos.bucket, "checks", file), checkResultItemId: r.item.id });
+        }
+      }
+    }
+  } catch (err) {
+    if (bucket) await Promise.all(stored.map((p) => bucket.delete(p.key).catch(() => undefined)));
+    throw err;
+  }
+  const overallPhoto = stored.find((p) => p.checkResultItemId === null)?.key ?? null;
 
-  const description = passed
-    ? `Reported by driver: ${notes}`
-    : `Failed: ${failed.map((f) => f.label).join(", ")}. Driver notes: ${notes}`;
+  const resultRows = rows.map((r) => ({
+    id: crypto.randomUUID(),
+    checkId,
+    checklistItemId: r.item.id,
+    label: r.item.label,
+    section: r.item.section,
+    ok: r.status !== "fail",
+    status: r.status,
+    note: r.note.slice(0, 1000),
+    severity: r.severity,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  }));
+  const resultIdByItem = new Map(resultRows.map((r) => [r.checklistItemId, r.id]));
+
+  // Defects: one per failed item on the current form; one for the whole check on the older form.
+  const defects: (typeof defect.$inferInsert)[] = [];
+  const base = {
+    vehicleId: v.id,
+    vehicleName: v.name,
+    checkId,
+    status: "open" as const,
+    reportedById: actor.id,
+    reportedByName: actor.name,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+  };
+  if (usingAnswers) {
+    for (const r of failedRows) {
+      defects.push({
+        ...base,
+        id: crypto.randomUUID(),
+        checkResultId: resultIdByItem.get(r.item.id) ?? null,
+        description: `${r.item.label}: ${r.note}`.slice(0, 2000),
+        severity: r.severity ?? "minor",
+        photoKey: stored.find((p) => p.checkResultItemId === r.item.id)?.key ?? null,
+      });
+    }
+  } else if (!passed) {
+    defects.push({
+      ...base,
+      id: crypto.randomUUID(),
+      description: `Failed: ${failedRows.map((f) => f.item.label).join(", ")}. Driver notes: ${notes}`.slice(0, 2000),
+      severity: input.severity,
+      photoKey: overallPhoto,
+    });
+  }
+  if (input.reportAnyway && notes.length > 0 && (usingAnswers || passed)) {
+    defects.push({
+      ...base,
+      id: crypto.randomUUID(),
+      description: `Reported by driver: ${notes}`.slice(0, 2000),
+      severity: input.severity,
+      photoKey: overallPhoto,
+    });
+  }
+  const worst = worstOf(defects.map((d) => d.severity ?? "minor"));
+  const offRoad = worst === "critical";
 
   const insertCheck = db.insert(check).values({
     id: checkId,
@@ -109,56 +267,48 @@ export async function submitCheck(
     odometerWentBack: wentBack,
     passed,
     notes,
-    photoKey,
+    photoKey: overallPhoto,
     createdAt: nowIso,
     updatedAt: nowIso,
   });
-  // D1 allows at most 100 bound values per statement, so results go in chunks of 10 rows (7 values each).
-  const resultRows = items.map((i) => ({
+  // D1 allows at most 100 bound values per statement, so rows go in small chunks.
+  const insertResults = chunk(resultRows, 8).map((part) => db.insert(checkResult).values(part));
+  const insertDefects = chunk(defects, 5).map((part) => db.insert(defect).values(part));
+  const photoRows = stored.map((p) => ({
     id: crypto.randomUUID(),
     checkId,
-    checklistItemId: i.id,
-    label: i.label,
-    ok: ticked.has(i.id),
+    checkResultId: p.checkResultItemId ? (resultIdByItem.get(p.checkResultItemId) ?? null) : null,
+    key: p.key,
     createdAt: nowIso,
     updatedAt: nowIso,
   }));
-  const insertResults = chunk(resultRows, 10).map((rows) => db.insert(checkResult).values(rows));
+  const insertPhotos = chunk(photoRows, 10).map((part) => db.insert(checkPhoto).values(part));
   const updateVehicle = db
     .update(vehicle)
     .set({ odometerKm: input.odometer, updatedAt: nowIso, ...(offRoad ? { status: "off_road" as const } : {}) })
     .where(eq(vehicle.id, v.id));
 
   try {
-    if (defectId) {
-      const insertDefect = db.insert(defect).values({
-        id: defectId,
-        vehicleId: v.id,
-        vehicleName: v.name,
-        checkId,
-        description: description.slice(0, 2000),
-        severity,
-        status: "open",
-        reportedById: actor.id,
-        reportedByName: actor.name,
-        photoKey,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      });
-      await db.batch([insertCheck, ...insertResults, insertDefect, updateVehicle]);
-    } else {
-      await db.batch([insertCheck, ...insertResults, updateVehicle]);
-    }
+    await db.batch([insertCheck, ...insertResults, ...insertDefects, ...insertPhotos, updateVehicle]);
   } catch (err) {
-    if (photo && photoKey) await photo.bucket.delete(photoKey).catch(() => undefined);
+    if (bucket) await Promise.all(stored.map((p) => bucket.delete(p.key).catch(() => undefined)));
     // A double click or a resent form arrives with the same submission id: treat it as already saved.
     if (isUniqueViolation(err)) return { kind: "duplicate", checkId };
     throw err;
   }
 
-  return { kind: "saved", checkId, passed, defectId, offRoad, failed: failed.map((f) => f.label) };
+  const defectIds = defects.map((d) => d.id);
+  return {
+    kind: "saved",
+    checkId,
+    passed,
+    defectId: defectIds[0] ?? null,
+    defectIds,
+    offRoad,
+    failed: failedRows.map((f) => f.item.label),
+    worst,
+  };
 }
-
 export interface HistoryFilter {
   vehicle?: string | undefined;
   driver?: string | undefined;
@@ -198,7 +348,7 @@ export async function getCheck(
   db: DB,
   actor: AppUser,
   checkId: string,
-): Promise<{ check: Check; results: CheckResult[] } | null> {
+): Promise<{ check: Check; results: CheckResult[]; photos: CheckPhoto[] } | null> {
   const row = await db.select().from(check).where(eq(check.id, checkId)).get();
   if (!row || !can(actor, "check:view", { ownerId: row.driverId })) return null;
   const results = await db
@@ -208,7 +358,13 @@ export async function getCheck(
     // rowid keeps the order the items were saved in, which is the checklist order at the time.
     .orderBy(sql`rowid`)
     .all();
-  return { check: row, results };
+  const photos = await db
+    .select()
+    .from(checkPhoto)
+    .where(eq(checkPhoto.checkId, checkId))
+    .orderBy(sql`rowid`)
+    .all();
+  return { check: row, results, photos };
 }
 
 /** Distinct drivers who have submitted checks, for the history filter. */

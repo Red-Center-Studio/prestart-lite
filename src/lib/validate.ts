@@ -86,7 +86,11 @@ export const vehicleSchema = z.object({
   notes: optionalText(1000, "Notes"),
 });
 
-export const checklistLabelSchema = z.object({ label: required(120, "Checklist item") });
+export const checklistLabelSchema = z.object({
+  label: required(120, "Checklist item"),
+  section: optionalText(40, "Section").transform((v) => v || "General"),
+});
+export const templateSchema = z.object({ template: z.string().trim().max(20) });
 export const moveSchema = z.object({ direction: z.enum(["up", "down"]) });
 
 export const businessSchema = z.object({

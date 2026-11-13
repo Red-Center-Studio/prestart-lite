@@ -77,7 +77,13 @@ export const verifyCsrf: MiddlewareHandler<AppEnv> = async (c, next) => {
   const type = c.req.header("content-type") ?? "";
   if (type.includes("form")) {
     // Hono caches the parsed body, so routes calling parseBody({ all: true }) later get this same result.
-    const body = await c.req.parseBody({ all: true });
+    let body: Awaited<ReturnType<typeof c.req.parseBody>>;
+    try {
+      body = await c.req.parseBody({ all: true });
+    } catch {
+      // A cut-off upload (lost signal mid-send) or a malformed form is a bad request, not a server error.
+      return c.text("The form did not arrive in one piece. Go back and try again.", 400);
+    }
     const v = body[CSRF_FIELD];
     sent = typeof v === "string" ? v : "";
   }

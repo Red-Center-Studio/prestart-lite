@@ -4,7 +4,7 @@
  * Never run this against a real fleet's database: it deletes everything first.
  */
 import { hashPassword } from "../auth/password.ts";
-import { STANDARD_CHECKLIST } from "../labels.ts";
+import { CHECKLIST_TEMPLATES } from "../labels.ts";
 
 export const DEMO_PASSWORD = "prestart-demo-2026";
 
@@ -33,6 +33,7 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
   const nowMs = now.getTime();
 
   for (const table of [
+    "check_photo",
     "check_result",
     "defect",
     "`check`",
@@ -87,11 +88,24 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
     return p;
   };
 
-  // Checklist.
-  const items = STANDARD_CHECKLIST.map((label, sort) => ({ id: crypto.randomUUID(), label, sort }));
+  // Checklist: the ready-made ute and 4WD list, which suits a mixed light fleet.
+  const template = CHECKLIST_TEMPLATES.ute;
+  if (!template) throw new Error("missing ute checklist template");
+  const items = template.items.map(([section, label], sort) => ({ id: crypto.randomUUID(), section, label, sort }));
   for (const item of items) {
-    add("INSERT INTO checklist_item (id, label, sort, active) VALUES (?, ?, ?, 1)", item.id, item.label, item.sort);
+    add(
+      "INSERT INTO checklist_item (id, label, section, sort, active) VALUES (?, ?, ?, ?, 1)",
+      item.id,
+      item.label,
+      item.section,
+      item.sort,
+    );
   }
+  const itemIndex = (start: string) => {
+    const i = items.findIndex((x) => x.label.startsWith(start));
+    if (i < 0) throw new Error(`missing demo checklist item ${start}`);
+    return i;
+  };
 
   // Vehicles. Due dates are relative to today so reminders always look current.
   const vehicles = [
@@ -159,9 +173,10 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
     driver: string;
     daysAgo: number;
     kmBack: number;
-    failed?: number[];
+    failed?: number;
     notes?: string;
     severity?: "minor" | "major" | "critical";
+    na?: number[];
     status?: "open" | "in_progress" | "fixed";
     workshopNotes?: string;
   };
@@ -173,7 +188,7 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
       driver: "Casey Brown",
       daysAgo: 1.1,
       kmBack: 0,
-      failed: [2],
+      failed: itemIndex("Brakes"),
       notes: "Brake pedal goes nearly to the floor. Parked it in bay 3.",
       severity: "critical",
       status: "open",
@@ -183,20 +198,30 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
       driver: "Jordan Taylor",
       daysAgo: 1.2,
       kmBack: 0,
-      failed: [1],
+      failed: itemIndex("Indicators"),
       notes: "Left rear indicator not flashing.",
       severity: "major",
       status: "in_progress",
       workshopNotes: "Globe ordered, arriving Thursday.",
     },
-    { vehicle: "Ranger Wildtrak", driver: "Jordan Taylor", daysAgo: 2.1, kmBack: 180 },
+    {
+      vehicle: "Ranger Wildtrak",
+      driver: "Jordan Taylor",
+      daysAgo: 2.1,
+      kmBack: 180,
+      na: [itemIndex("Tow bar")],
+      failed: itemIndex("Tray"),
+      notes: "Toolbox lid latch is loose. Strapped it shut for now.",
+      severity: "minor",
+      status: "open",
+    },
     { vehicle: "Hilux 1", driver: "Casey Brown", daysAgo: 3.1, kmBack: 260 },
     {
       vehicle: "Hino 500",
       driver: "Jordan Taylor",
       daysAgo: 4.2,
       kmBack: 410,
-      failed: [6],
+      failed: itemIndex("Horn"),
       notes: "Passenger wiper blade torn.",
       severity: "minor",
       status: "fixed",
@@ -212,8 +237,9 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
     const d = byName(ch.driver);
     const checkId = crypto.randomUUID();
     const when = iso(ch.daysAgo * DAY);
-    const failed = new Set(ch.failed ?? []);
-    const passed = failed.size === 0;
+    const failedIndex = ch.failed ?? -1;
+    const na = new Set(ch.na ?? []);
+    const passed = failedIndex < 0;
     add(
       "INSERT INTO `check` (id, vehicle_id, vehicle_name, driver_id, driver_name, odometer_km, odometer_went_back, passed, notes, photo_key, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, NULL, ?, ?)",
       checkId,
@@ -223,32 +249,41 @@ export async function demoStatements(now = new Date()): Promise<Statement[]> {
       d.name,
       v.km - ch.kmBack,
       passed ? 1 : 0,
-      ch.notes ?? "",
+      "",
       when,
       when,
     );
+    let failedResultId: string | null = null;
     for (const [index, item] of items.entries()) {
+      const resultId = crypto.randomUUID();
+      const status = index === failedIndex ? "fail" : na.has(index) ? "na" : "pass";
+      if (status === "fail") failedResultId = resultId;
       add(
-        "INSERT INTO check_result (id, check_id, checklist_item_id, label, ok, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        crypto.randomUUID(),
+        "INSERT INTO check_result (id, check_id, checklist_item_id, label, section, ok, status, note, severity, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        resultId,
         checkId,
         item.id,
         item.label,
-        failed.has(index) ? 0 : 1,
+        item.section,
+        status === "fail" ? 0 : 1,
+        status,
+        status === "fail" ? (ch.notes ?? "") : "",
+        status === "fail" ? (ch.severity ?? "minor") : null,
         when,
         when,
       );
     }
-    if (!passed) {
-      const labels = items.filter((_, i) => failed.has(i)).map((i) => i.label);
+    const failedItem = items[failedIndex];
+    if (failedItem) {
       const fixed = ch.status === "fixed";
       add(
-        "INSERT INTO defect (id, vehicle_id, vehicle_name, check_id, description, severity, status, reported_by_id, reported_by_name, photo_key, workshop_notes, fixed_at, fixed_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+        "INSERT INTO defect (id, vehicle_id, vehicle_name, check_id, check_result_id, description, severity, status, reported_by_id, reported_by_name, photo_key, workshop_notes, fixed_at, fixed_by_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
         crypto.randomUUID(),
         v.id,
         v.name,
         checkId,
-        `Failed: ${labels.join(", ")}. Driver notes: ${ch.notes ?? ""}`,
+        failedResultId,
+        `${failedItem.label}: ${ch.notes ?? ""}`,
         ch.severity ?? "minor",
         ch.status ?? "open",
         d.id,

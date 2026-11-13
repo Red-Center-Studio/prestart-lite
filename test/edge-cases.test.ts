@@ -4,7 +4,14 @@ import { eq } from "drizzle-orm";
 import { check, checklistItem, defect, user, vehicle } from "../src/db/schema";
 import { createAuth, PUBLIC_PLACEHOLDER_SECRETS } from "../src/auth/auth";
 import { resetDemo } from "../src/services/demo";
-import { addStandardChecklist, deleteVehicle, moveChecklistItem, listChecklist } from "../src/services/fleet";
+import {
+  addChecklistTemplate,
+  addStandardChecklist,
+  deleteVehicle,
+  moveChecklistItem,
+  listChecklist,
+} from "../src/services/fleet";
+import { CHECKLIST_TEMPLATES } from "../src/labels";
 import { submitCheck } from "../src/services/checks";
 import { DEMO_ACCOUNTS } from "../src/seed/demo";
 import type { Bindings } from "../src/env";
@@ -110,6 +117,19 @@ describe("hostile edge cases", () => {
     expect(await addStandardChecklist(db(), admin)).toEqual({ ok: true, value: 8 });
     expect(await addStandardChecklist(db(), admin)).toEqual({ ok: true, value: 0 });
     expect(await db().select().from(checklistItem).all()).toHaveLength(8);
+  });
+
+  it("adds a ready-made checklist with its sections, skipping wording already on the list", async () => {
+    const admin = await makeUser("admin");
+    const forklift = CHECKLIST_TEMPLATES.forklift?.items ?? [];
+    await makeItems([forklift[0]?.[1] ?? ""]);
+    expect(await addChecklistTemplate(db(), admin, "forklift")).toEqual({ ok: true, value: forklift.length - 1 });
+    expect(await addChecklistTemplate(db(), admin, "forklift")).toEqual({ ok: true, value: 0 });
+    const items = await listChecklist(db(), admin);
+    expect(items).toHaveLength(forklift.length);
+    expect(items.find((i) => i.label === forklift[1]?.[1])?.section).toBe(forklift[1]?.[0]);
+    expect((await addChecklistTemplate(db(), admin, "toString")).ok).toBe(false);
+    expect((await addChecklistTemplate(db(), await makeUser("driver"), "forklift")).ok).toBe(false);
   });
 
   it("moves checklist items and ignores moves past either end", async () => {
@@ -239,7 +259,7 @@ describe("demo reset", () => {
     const vehicles = await db().select().from(vehicle).all();
     expect(vehicles.map((v) => v.name)).not.toContain("Leftover");
     expect(vehicles).toHaveLength(6);
-    expect(await db().select().from(checklistItem).all()).toHaveLength(8);
+    expect(await db().select().from(checklistItem).all()).toHaveLength(CHECKLIST_TEMPLATES.ute?.items.length ?? 0);
     expect((await env.PHOTOS.list({ prefix: "checks/" })).objects).toHaveLength(0);
     for (const a of DEMO_ACCOUNTS) {
       const row = await db().select().from(user).where(eq(user.email, a.email)).get();

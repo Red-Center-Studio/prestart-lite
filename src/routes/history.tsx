@@ -7,7 +7,7 @@ import { formatDateTime, formatNumber } from "../lib/text";
 import { checkDrivers, getCheck, listChecks } from "../services/checks";
 import { listVehicles } from "../services/fleet";
 import { words } from "../labels";
-import { Alert, btn, Card, Empty, H1, PassBadge } from "../views/components";
+import { Alert, btn, Card, Empty, H1, PassBadge, SeverityBadge } from "../views/components";
 import { render } from "./render";
 
 export const historyRoutes = new Hono<AppEnv>();
@@ -43,7 +43,7 @@ historyRoutes.get("/history", requirePermission("check:submit"), async (c) => {
     { title: "History", active: "history" },
     <>
       <H1 sub={staff ? "Every check, newest first." : "Your checks, newest first."}>History</H1>
-      <details class="mb-4 rounded-2xl border border-gray-200 bg-white p-4" open={filtered}>
+      <details class="mb-4 rounded-2xl border border-line bg-white shadow-sm p-4" open={filtered}>
         <summary class="cursor-pointer font-semibold">Filter</summary>
         <form method="get" action="/history" class="mt-3 grid gap-3 sm:grid-cols-2">
           <label class="text-sm font-medium">
@@ -109,13 +109,13 @@ historyRoutes.get("/history", requirePermission("check:submit"), async (c) => {
             <li>
               <a
                 href={`/history/${r.id}`}
-                class="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 hover:border-primary-200"
+                class="flex items-center justify-between gap-3 rounded-2xl border border-line bg-white shadow-sm p-4 hover:border-primary-200"
               >
                 <div class="min-w-0">
                   <p class="truncate font-semibold">{r.vehicleName}</p>
                   <p class="text-sm text-gray-600">
                     {formatDateTime(r.createdAt, c.env.TIME_ZONE)}
-                    {staff ? ` Â· ${r.driverName}` : ""}
+                    {staff ? `, ${r.driverName}` : ""}
                   </p>
                   {r.odometerWentBack ? (
                     <p class="mt-1 text-xs font-semibold text-alert-700">Odometer lower than the last reading</p>
@@ -153,7 +153,23 @@ historyRoutes.get("/history/:id", requirePermission("check:submit"), async (c) =
   // getCheck returns null for another driver's check, so changing the id in the URL shows "not found".
   const found = await getCheck(c.get("db"), user, parsed.data);
   if (!found) return c.notFound();
-  const { check: ch, results } = found;
+  const { check: ch, results, photos } = found;
+  const overallPhotos = photos.filter((p) => !p.checkResultId);
+  const photosFor = (resultId: string) => photos.filter((p) => p.checkResultId === resultId);
+  const sections = new Map<string, typeof results>();
+  for (const r of results) sections.set(r.section, [...(sections.get(r.section) ?? []), r]);
+  const failed = results.filter((r) => r.status === "fail").length;
+  const na = results.filter((r) => r.status === "na").length;
+  const Photo = ({ id, n }: { id: string; n: number }) => (
+    <a href={`/photos/item/${id}`} target="_blank" rel="noopener" class="block">
+      <img
+        src={`/photos/item/${id}`}
+        alt={`Photo ${n} from the check of ${ch.vehicleName}`}
+        class="h-28 w-28 rounded-xl border border-line object-cover"
+        loading="lazy"
+      />
+    </a>
+  );
   return render(
     c,
     { title: `Check: ${ch.vehicleName}`, active: "history" },
@@ -168,6 +184,9 @@ historyRoutes.get("/history/:id", requirePermission("check:submit"), async (c) =
           <span class="text-gray-700">
             {words.odometer}: {formatNumber(ch.odometerKm)} {words.distanceUnit}
           </span>
+          <span class="text-gray-700">
+            {results.length - failed - na} passed, {failed} failed{na ? `, ${na} N/A` : ""}
+          </span>
         </div>
         {ch.odometerWentBack ? (
           <Alert tone="warning">
@@ -175,30 +194,63 @@ historyRoutes.get("/history/:id", requirePermission("check:submit"), async (c) =
           </Alert>
         ) : null}
         {ch.notes ? <p class="mt-3 whitespace-pre-wrap text-gray-800">{ch.notes}</p> : null}
-        {ch.photoKey ? (
+        {overallPhotos.length > 0 ? (
+          <div class="mt-3 flex flex-wrap gap-2">
+            {overallPhotos.map((p, i) => (
+              <Photo id={p.id} n={i + 1} />
+            ))}
+          </div>
+        ) : ch.photoKey ? (
           <a href={`/photos/check/${ch.id}`} target="_blank" rel="noopener" class="mt-3 block">
             <img
               src={`/photos/check/${ch.id}`}
               alt={`Photo from the check of ${ch.vehicleName}`}
-              class="max-h-80 rounded-xl border border-gray-200"
+              class="max-h-80 rounded-xl border border-line"
               loading="lazy"
             />
           </a>
         ) : null}
       </Card>
-      <Card>
-        <h2 class="mb-2 text-lg font-semibold">Checklist</h2>
-        <ul class="divide-y divide-gray-100">
-          {results.map((r) => (
-            <li class="flex items-center justify-between gap-3 py-2">
-              <span>{r.label}</span>
-              <span class={r.ok ? "text-sm font-semibold text-success" : "text-sm font-semibold text-danger"}>
-                {r.ok ? "OK" : "Problem"}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </Card>
+      {[...sections.entries()].map(([section, list]) => (
+        <Card class="mb-4 overflow-hidden">
+          <h2 class="-mx-4 -mt-4 mb-1 bg-navy-700 px-4 py-2.5 text-base font-bold text-white sm:-mx-5 sm:-mt-5 sm:px-5">
+            {section}
+          </h2>
+          <ul class="divide-y divide-gray-200">
+            {list.map((r) => (
+              <li class="py-2.5">
+                <div class="flex items-center justify-between gap-3">
+                  <span>{r.label}</span>
+                  <span
+                    class={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      r.status === "fail"
+                        ? "bg-danger text-white"
+                        : r.status === "na"
+                          ? "bg-slate-200 text-slate-800"
+                          : "bg-success-50 text-success"
+                    }`}
+                  >
+                    {r.status === "fail" ? "Fail" : r.status === "na" ? "N/A" : "Pass"}
+                  </span>
+                </div>
+                {r.status === "fail" ? (
+                  <div class="mt-1.5 flex flex-wrap items-start gap-2 text-sm text-gray-800">
+                    {r.severity ? <SeverityBadge severity={r.severity} /> : null}
+                    {r.note ? <span class="whitespace-pre-wrap">{r.note}</span> : null}
+                  </div>
+                ) : null}
+                {photosFor(r.id).length > 0 ? (
+                  <div class="mt-2 flex flex-wrap gap-2">
+                    {photosFor(r.id).map((p, i) => (
+                      <Photo id={p.id} n={i + 1} />
+                    ))}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ))}
     </>,
   );
 });

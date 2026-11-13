@@ -17,6 +17,7 @@ import { miscRoutes } from "./routes/misc";
 import { resetDemo } from "./services/demo";
 
 const MAX_BODY_BYTES = 12 * 1024 * 1024;
+const MAX_CHECK_BODY_BYTES = 60 * 1024 * 1024;
 
 export const app = new Hono<AppEnv>();
 
@@ -40,8 +41,10 @@ app.use(base);
 // Reject oversized uploads before reading them.
 app.use(async (c, next) => {
   const length = Number(c.req.header("content-length") ?? "0");
-  if (length > MAX_BODY_BYTES) {
-    return c.text("That upload is too big. Photos must be 10 MB or smaller.", 413);
+  // A check can carry a few photos for each failed item, so it gets more room than other forms.
+  const limit = c.req.path === "/check" ? MAX_CHECK_BODY_BYTES : MAX_BODY_BYTES;
+  if (length > limit) {
+    return c.text("That upload is too big. Use fewer photos, each 10 MB or smaller.", 413);
   }
   await next();
 });

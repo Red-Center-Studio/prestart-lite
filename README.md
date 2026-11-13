@@ -3,9 +3,10 @@
 **Daily vehicle pre-start checks and a defect workflow for small fleets. Free, open source, and it runs in your own
 Cloudflare account on the free plan.**
 
-Drivers tick a checklist on their phone before they drive. Anything that fails goes straight to a workshop queue. A
-critical fault takes the vehicle off the road until the workshop marks it fixed. Every check is kept, with who, when
-and exactly what was ticked, ready for safety audits and insurers.
+Drivers mark every item Pass, Fail or N/A on their phone before they drive. Each failed item goes to the workshop
+queue with its own note, severity and photos, and the driver is told plainly what to do next: safe to drive, get it
+checked first, or do not drive. A critical fault takes the vehicle off the road until the workshop marks it fixed. Every
+check is kept, with who, when and every answer, ready for safety audits and insurers.
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Red-Center-Studio/prestart-lite)
 
@@ -20,8 +21,14 @@ and exactly what was ticked, ready for safety audits and insurers.
 
 ## What it does
 
-- **Daily checks in under a minute.** Pick the vehicle, enter the odometer, tick what is OK. Add a note, a severity
-  and a photo for anything that is not.
+- **Daily checks in under a minute.** Pick the vehicle, enter the odometer, mark each item Pass, Fail or N/A (or
+  "All pass"). A failed item asks what is wrong, how serious it is, and takes up to 3 photos.
+- **Clear next steps.** Minor: safe to drive, the workshop is told. Major: do not drive until a supervisor or the
+  workshop says it is safe. Critical: the vehicle goes off road. Each level is explained on the form, so drivers pick
+  the right one.
+- **Ready-made checklists.** Car, ute or 4WD, truck, trailer, forklift and plant, grouped into sections like Tyres,
+  Lights and Brakes. Add one in a click, then edit it to suit.
+- **Known faults.** Picking a vehicle shows its open faults, so the next driver knows what is already reported.
 - **Defect queue.** Critical faults first. The workshop can start work, add notes and mark things fixed.
 - **Off road means off road.** A critical fault takes the vehicle off road. It comes back only when no critical defect
   is left on it, and drivers cannot submit checks on it in the meantime.
@@ -30,7 +37,8 @@ and exactly what was ticked, ready for safety audits and insurers.
   see everything.
 - **Roles.** Driver, Workshop and Admin. New sign-ups wait for an admin to approve them. The first account on a new
   install becomes the Admin.
-- **Private photos.** Stored in your own Cloudflare R2 bucket and only shown to people allowed to see them.
+- **Private photos.** Shrunk on the phone before upload, stored in your own Cloudflare R2 bucket and only shown to
+  people allowed to see them.
 - **Built for yards.** Mobile-first pages, big tap targets, clear messages when the signal drops.
 
 ## Why it is built this way

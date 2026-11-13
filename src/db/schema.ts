@@ -130,6 +130,8 @@ export const vehicle = sqliteTable(
 export const checklistItem = sqliteTable("checklist_item", {
   id: text("id").primaryKey(),
   label: text("label").notNull(),
+  // Group shown as a heading on the check form, for example "Exterior" or "Safety equipment".
+  section: text("section").notNull().default("General"),
   sort: integer("sort").notNull().default(0),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
   ...timestamps,
@@ -166,7 +168,14 @@ export const checkResult = sqliteTable(
       .references(() => check.id, { onDelete: "cascade" }),
     checklistItemId: text("checklist_item_id").notNull(),
     label: text("label").notNull(),
+    section: text("section").notNull().default("General"),
+    // false only for a failed item. N/A items count as ok.
     ok: integer("ok", { mode: "boolean" }).notNull(),
+    status: text("status", { enum: ["pass", "fail", "na"] })
+      .notNull()
+      .default("pass"),
+    note: text("note").notNull().default(""),
+    severity: text("severity", { enum: ["minor", "major", "critical"] }),
     ...timestamps,
   },
   (t) => [index("check_result_check_idx").on(t.checkId)],
@@ -179,6 +188,8 @@ export const defect = sqliteTable(
     vehicleId: text("vehicle_id").notNull(),
     vehicleName: text("vehicle_name").notNull(),
     checkId: text("check_id"),
+    // The checklist answer that raised this defect, when it came from a failed item.
+    checkResultId: text("check_result_id"),
     description: text("description").notNull(),
     severity: text("severity", { enum: ["minor", "major", "critical"] })
       .notNull()
@@ -202,6 +213,21 @@ export const defect = sqliteTable(
   ],
 );
 
+// Photos taken during a check: one or more per failed item, or for the check as a whole. Never public.
+export const checkPhoto = sqliteTable(
+  "check_photo",
+  {
+    id: text("id").primaryKey(),
+    checkId: text("check_id")
+      .notNull()
+      .references(() => check.id, { onDelete: "cascade" }),
+    checkResultId: text("check_result_id"),
+    key: text("key").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("check_photo_check_idx").on(t.checkId)],
+);
+
 export const schema = {
   user,
   session,
@@ -213,6 +239,7 @@ export const schema = {
   check,
   checkResult,
   defect,
+  checkPhoto,
 };
 
 export type User = typeof user.$inferSelect;
@@ -221,4 +248,5 @@ export type ChecklistItem = typeof checklistItem.$inferSelect;
 export type Check = typeof check.$inferSelect;
 export type CheckResult = typeof checkResult.$inferSelect;
 export type Defect = typeof defect.$inferSelect;
+export type CheckPhoto = typeof checkPhoto.$inferSelect;
 export type AppSettings = typeof appSettings.$inferSelect;

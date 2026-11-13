@@ -10,7 +10,7 @@ import {
   type Vehicle,
 } from "../db/schema";
 import type { AppUser } from "../env";
-import { STANDARD_CHECKLIST, type VehicleStatus } from "../labels";
+import { CHECKLIST_TEMPLATES, STANDARD_CHECKLIST, type VehicleStatus } from "../labels";
 import { can } from "../lib/can";
 import { chunk } from "./checks";
 
@@ -138,25 +138,41 @@ async function nextSort(db: DB): Promise<number> {
   return (row?.max ?? -1) + 1;
 }
 
-export async function addChecklistItem(db: DB, actor: AppUser, label: string): Promise<Result> {
+export async function addChecklistItem(db: DB, actor: AppUser, label: string, section = "General"): Promise<Result> {
   if (!can(actor, "checklist:edit")) return denied;
-  await db.insert(checklistItem).values({ id: crypto.randomUUID(), label, sort: await nextSort(db) });
+  await db.insert(checklistItem).values({ id: crypto.randomUUID(), label, section, sort: await nextSort(db) });
   return { ok: true };
 }
 
 /** Adds the 8 standard items, skipping any whose wording is already on the list. */
 export async function addStandardChecklist(db: DB, actor: AppUser): Promise<Result<number>> {
+  return addItems(
+    db,
+    actor,
+    STANDARD_CHECKLIST.map((label) => ["General", label]),
+  );
+}
+
+/** Adds every item from a ready-made checklist, skipping any whose wording is already on the list. */
+export async function addChecklistTemplate(db: DB, actor: AppUser, key: string): Promise<Result<number>> {
+  const template = Object.hasOwn(CHECKLIST_TEMPLATES, key) ? CHECKLIST_TEMPLATES[key] : undefined;
+  if (!template) return { ok: false, message: "Choose a checklist to add." };
+  return addItems(db, actor, template.items);
+}
+
+async function addItems(db: DB, actor: AppUser, items: [string, string][]): Promise<Result<number>> {
   if (!can(actor, "checklist:edit")) return denied;
   const existing = new Set(
     (await db.select({ label: checklistItem.label }).from(checklistItem).all()).map((r) => r.label.toLowerCase()),
   );
-  const toAdd = STANDARD_CHECKLIST.filter((l) => !existing.has(l.toLowerCase()));
+  const toAdd = items.filter(([, l]) => !existing.has(l.toLowerCase()));
   if (toAdd.length === 0) return { ok: true, value: 0 };
   const start = await nextSort(db);
   const nowIso = new Date().toISOString();
-  const rows = toAdd.map((label, i) => ({
+  const rows = toAdd.map(([section, label], i) => ({
     id: crypto.randomUUID(),
     label,
+    section,
     sort: start + i,
     active: true,
     createdAt: nowIso,
@@ -168,11 +184,17 @@ export async function addStandardChecklist(db: DB, actor: AppUser): Promise<Resu
   return { ok: true, value: toAdd.length };
 }
 
-export async function renameChecklistItem(db: DB, actor: AppUser, itemId: string, label: string): Promise<Result> {
+export async function renameChecklistItem(
+  db: DB,
+  actor: AppUser,
+  itemId: string,
+  label: string,
+  section?: string,
+): Promise<Result> {
   if (!can(actor, "checklist:edit")) return denied;
   const res = await db
     .update(checklistItem)
-    .set({ label, updatedAt: new Date().toISOString() })
+    .set({ label, ...(section ? { section } : {}), updatedAt: new Date().toISOString() })
     .where(eq(checklistItem.id, itemId))
     .run();
   return res.meta.changes === 0 ? { ok: false, message: "That item no longer exists." } : { ok: true };

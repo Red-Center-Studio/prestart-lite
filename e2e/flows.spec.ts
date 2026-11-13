@@ -46,23 +46,46 @@ async function addVehicle(admin: Page, name: string, rego: string) {
   await expect(admin.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 
+type Severity = "Minor" | "Major" | "Critical (do not drive)";
+
+const OUTCOME: Record<"none" | Severity, string> = {
+  none: "Check passed. Drive safe.",
+  Minor: "Check submitted. Safe to drive.",
+  Major: "Check submitted. Do not drive yet.",
+  "Critical (do not drive)": "Do not drive this vehicle.",
+};
+
+// A real 1 by 1 PNG, so the browser can read it when it shrinks photos before upload.
+const PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 async function submitCheck(
   driver: Page,
   vehicleLabel: string,
   odometer: string,
-  opts: { fail?: string; notes?: string; severity?: "Minor" | "Major" | "Critical (do not drive)" } = {},
+  opts: { fail?: string; notes?: string; severity?: Severity; photo?: boolean } = {},
 ) {
   await driver.goto("/check");
-  await driver.getByLabel("Vehicle").selectOption({ label: vehicleLabel });
+  await driver.getByLabel("Vehicle", { exact: true }).selectOption({ label: vehicleLabel });
   await driver.getByLabel("Odometer (km)").fill(odometer);
-  await driver.getByRole("button", { name: "Tick all" }).click();
   if (opts.fail) {
-    await driver.getByLabel(opts.fail).uncheck();
-    await driver.getByLabel("Problem description").fill(opts.notes ?? "Problem found");
-    await driver.getByLabel(opts.severity ?? "Minor").check();
+    const row = driver.locator("[data-item]").filter({ hasText: opts.fail });
+    await row.getByText("Fail", { exact: true }).click();
+    await row.getByLabel("What is wrong?").fill(opts.notes ?? "Problem found");
+    await row
+      .getByRole("radio", { name: new RegExp(`^${(opts.severity ?? "Minor").replace(/[()]/g, "\\$&")}`) })
+      .check();
+    if (opts.photo) {
+      await row.locator("input[type=file]").setInputFiles({ name: "fault.png", mimeType: "image/png", buffer: PNG });
+    }
   }
+  await driver.getByRole("button", { name: "All pass" }).click();
+  await expect(driver.getByText(/answered\./)).toHaveText(/(\d+) of \1 answered\./);
   await driver.getByRole("button", { name: "Submit check" }).click();
-  await expect(driver.getByRole("heading", { name: "Check submitted. Drive safe." })).toBeVisible();
+  const outcome = OUTCOME[opts.fail ? (opts.severity ?? "Minor") : "none"];
+  await expect(driver.getByRole("heading", { name: outcome })).toBeVisible();
 }
 
 const vehicleCard = (page: Page, name: string) =>
@@ -82,9 +105,46 @@ test("driver submits a passing check", async ({ browser }, info) => {
   await expect(driver.getByText("went to the workshop queue")).toHaveCount(0);
 
   await driver.getByRole("link", { name: "View this check" }).click();
-  await expect(driver.getByText("Passed")).toBeVisible();
+  await expect(driver.getByText("Passed", { exact: true })).toBeVisible();
   await driver.goto("/history");
   await expect(driver.getByRole("link", { name: new RegExp(name) }).first()).toBeVisible();
+});
+
+test("a major fault, like missing doors, tells the driver not to drive yet", async ({ browser }, info) => {
+  const admin = await pageAs(browser, "admin", info);
+  const driver = await pageAs(browser, "driver", info);
+  const name = `Major Ute ${uid()}`;
+  const rego = `M${uid()}`;
+  await addVehicle(admin, name, rego);
+
+  await submitCheck(driver, `${name} (${rego})`, "1020", {
+    fail: "Body, doors and panels",
+    notes: "Rear doors missing",
+    severity: "Major",
+    photo: true,
+  });
+  await expect(driver.getByText("Tell your supervisor or the workshop now")).toBeVisible();
+  await expect(driver.getByText("Drive safe")).toHaveCount(0);
+
+  // The check records the answer, the note and the photo, and the vehicle stays in service for the workshop to decide.
+  await driver.getByRole("link", { name: "View this check" }).click();
+  await expect(driver.getByText("Rear doors missing")).toBeVisible();
+  const photo = driver.getByRole("img", { name: /Photo 1 from the check/ });
+  await expect(photo).toBeVisible();
+  expect(await photo.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+
+  // The next driver sees the open fault when they pick that vehicle.
+  await driver.goto("/check");
+  await driver.getByLabel("Vehicle", { exact: true }).selectOption({ label: `${name} (${rego})` });
+  const faults = driver.locator("[data-faults-for]:visible");
+  await expect(faults.getByText("Known faults on this vehicle")).toBeVisible();
+  await expect(faults.getByText(/Rear doors missing/)).toBeVisible();
+
+  // An unanswered item is pointed out before anything is sent.
+  await driver.getByLabel("Odometer (km)").fill("1030");
+  await driver.getByRole("button", { name: "Submit check" }).click();
+  await expect(driver.getByText(/items have no answer yet/)).toBeVisible();
+  await expect(driver).toHaveURL(/\/check$/);
 });
 
 test("a critical fault takes the vehicle off road, and it returns only when no critical defect remains", async ({
@@ -107,7 +167,7 @@ test("a critical fault takes the vehicle off road, and it returns only when no c
   await driver.goto("/fleet");
   await expect(vehicleCard(driver, name).getByText("Off road")).toBeVisible();
   await driver.goto("/check");
-  await expect(driver.getByLabel("Vehicle").locator("option", { hasText: name })).toHaveCount(0);
+  await expect(driver.getByLabel("Vehicle", { exact: true }).locator("option", { hasText: name })).toHaveCount(0);
 
   // An admin puts it back in service by hand, and a second critical fault is found.
   await admin.goto("/fleet");
@@ -117,7 +177,7 @@ test("a critical fault takes the vehicle off road, and it returns only when no c
   await edit.getByRole("button", { name: "Save vehicle" }).click();
   await expect(admin.getByText("Vehicle saved.")).toBeVisible();
   await submitCheck(driver, `${name} (${rego})`, "1150", {
-    fail: "Lights and indicators working",
+    fail: "Headlights, tail lights and brake lights working",
     notes: "No headlights at all",
     severity: "Critical (do not drive)",
   });
