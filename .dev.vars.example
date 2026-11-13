@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars for local development. .dev.vars is never committed.
+# Any long random string works locally. Production uses `npx wrangler secret put AUTH_SECRET`.
+AUTH_SECRET=local-development-secret-change-me-0123456789abcdef

@@ -1,0 +1,45 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Worker's name. It becomes part of your free address: https://prestart.<your-subdomain>.workers.dev
+  "name": "prestart",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true },
+  },
+  // Built CSS, client JS and icons. Files here are served directly; everything else goes to the Worker.
+  "assets": { "directory": "./public", "binding": "ASSETS" },
+  // Database. On the first `wrangler deploy` Cloudflare creates it for you and writes its id here.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "prestart",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Photo storage. Created automatically on first deploy, like the database. Objects are never public.
+  "r2_buckets": [{ "binding": "PHOTOS", "bucket_name": "prestart-photos" }],
+  // Slows down password guessing: 10 sign-in, sign-up or reset attempts per minute per visitor.
+  "ratelimits": [{ "name": "AUTH_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }],
+  // Runs once a day at 15:00 UTC. In demo mode it wipes and reloads the demo data. Otherwise it does nothing.
+  "triggers": { "crons": ["0 15 * * *"] },
+  "vars": {
+    // Your app's public address, with no trailing slash. Used in email links. Leave empty to use the request's address.
+    "APP_URL": "",
+    // "true" makes new users confirm their email before signing in. Needs email set up (see SETUP.md).
+    "REQUIRE_EMAIL_VERIFICATION": "false",
+    // The address emails come from. Its domain must be set up in Cloudflare Email Sending.
+    "MAIL_FROM": "",
+    // Time zone for dates and times shown in the app (an IANA name such as Australia/Perth or America/Chicago).
+    "TIME_ZONE": "Australia/Sydney",
+    // "true" turns on demo mode: demo sign-ins on the login page and a nightly reset. Never use on a real fleet.
+    "DEMO_MODE": "false",
+  },
+  // To send email (verification, password reset), uncomment this after setting up Cloudflare Email Sending:
+  // "send_email": [{ "name": "EMAIL" }],
+  //
+  // Secrets are never written in this file. Set them with:  npx wrangler secret put AUTH_SECRET
+  //   AUTH_SECRET  a long random string that signs sign-in sessions (see SETUP.md for a one-line generator)
+}

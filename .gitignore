@@ -1,0 +1,14 @@
+node_modules/
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+public/styles.css
+test-results/
+playwright-report/
+.e2e-state/
+*.log
+.DS_Store
+
+# Internal build spec: kept locally, never committed
+SPEC.md

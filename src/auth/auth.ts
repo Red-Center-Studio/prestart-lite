@@ -1,0 +1,113 @@
+import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { type Bindings, isOn } from "../env";
+import { getDb } from "../db/client";
+import { account, session, user, verification } from "../db/schema";
+import { sendEmail } from "../lib/email";
+import { escapeHtml } from "../lib/text";
+import { hashPassword, verifyPassword } from "./password";
+
+export const PASSWORD_MIN = 8;
+export const PASSWORD_MAX = 128;
+
+/**
+ * Makes the first account on a fresh deploy an Admin. Runs after every sign-up as one atomic statement:
+ * only the oldest account gets the role, and only while no admin exists. If two people sign up at the same
+ * moment, exactly one becomes Admin.
+ */
+export async function promoteFirstUser(d1: D1Database, userId: string): Promise<boolean> {
+  const res = await d1
+    .prepare(
+      `UPDATE user SET role = 'admin'
+       WHERE id = ?1
+         AND id = (SELECT id FROM user ORDER BY created_at ASC, id ASC LIMIT 1)
+         AND NOT EXISTS (SELECT 1 FROM user WHERE role = 'admin')`,
+    )
+    .bind(userId)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/** The address used in email links: APP_URL if set, otherwise the address the request came in on. */
+export const appOrigin = (env: Bindings, requestOrigin: string): string =>
+  env.APP_URL ? env.APP_URL.replace(/\/+$/, "") : requestOrigin;
+
+export function createAuth(env: Bindings, origin: string) {
+  // Refuse to run with a missing or weak secret rather than sign sessions with something guessable.
+  if (!env.AUTH_SECRET || env.AUTH_SECRET.length < 32) {
+    throw new Error("AUTH_SECRET is missing or shorter than 32 characters. See SETUP.md, step 4.");
+  }
+  const baseURL = appOrigin(env, origin);
+  const requireVerification = isOn(env.REQUIRE_EMAIL_VERIFICATION);
+  return betterAuth({
+    appName: "PreStart",
+    baseURL,
+    basePath: "/api/auth",
+    secret: env.AUTH_SECRET,
+    trustedOrigins: [baseURL, origin],
+    database: drizzleAdapter(getDb(env.DB), {
+      provider: "sqlite",
+      schema: { user, session, account, verification },
+    }),
+    advanced: {
+      database: { generateId: () => crypto.randomUUID() },
+      cookiePrefix: "prestart",
+    },
+    session: {
+      expiresIn: 60 * 60 * 24 * 30,
+      updateAge: 60 * 60 * 24,
+    },
+    user: {
+      additionalFields: {
+        role: { type: "string", required: false, input: false },
+        isDemo: { type: "boolean", required: false, defaultValue: false, input: false },
+      },
+      // Without email confirmation switched on, an unconfirmed address changes straight away. Otherwise Better Auth
+      // emails a confirmation link to the new address first.
+      changeEmail: { enabled: true, updateEmailWithoutVerification: !requireVerification },
+    },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: PASSWORD_MIN,
+      maxPasswordLength: PASSWORD_MAX,
+      requireEmailVerification: requireVerification,
+      autoSignIn: !requireVerification,
+      revokeSessionsOnPasswordReset: true,
+      resetPasswordTokenExpiresIn: 60 * 60,
+      password: { hash: hashPassword, verify: verifyPassword },
+      sendResetPassword: async ({ user: u, url }) => {
+        await sendEmail(env, {
+          to: u.email,
+          subject: "Reset your PreStart password",
+          text: `Hi ${u.name},\n\nOpen this link to choose a new password. It works for 1 hour.\n\n${url}\n\nIf you did not ask for this, you can ignore this email.`,
+          html: `<p>Hi ${escapeHtml(u.name)},</p><p>Open this link to choose a new password. It works for 1 hour.</p><p><a href="${escapeHtml(url)}">Choose a new password</a></p><p>If you did not ask for this, you can ignore this email.</p>`,
+        });
+      },
+    },
+    emailVerification: {
+      sendOnSignUp: requireVerification,
+      autoSignInAfterVerification: true,
+      expiresIn: 60 * 60 * 24,
+      sendVerificationEmail: async ({ user: u, url }) => {
+        await sendEmail(env, {
+          to: u.email,
+          subject: "Confirm your email for PreStart",
+          text: `Hi ${u.name},\n\nOpen this link to confirm your email address:\n\n${url}\n\nIf you did not sign up, you can ignore this email.`,
+          html: `<p>Hi ${escapeHtml(u.name)},</p><p><a href="${escapeHtml(url)}">Confirm your email address</a></p><p>If you did not sign up, you can ignore this email.</p>`,
+        });
+      },
+    },
+    databaseHooks: {
+      user: {
+        create: {
+          after: async (created) => {
+            await promoteFirstUser(env.DB, created.id);
+          },
+        },
+      },
+    },
+    telemetry: { enabled: false },
+  });
+}
+
+export type Auth = ReturnType<typeof createAuth>;

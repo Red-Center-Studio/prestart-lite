@@ -1,0 +1,9 @@
+node_modules/
+.wrangler/
+public/styles.css
+worker-configuration.d.ts
+migrations/meta/
+package-lock.json
+test-results/
+playwright-report/
+SPEC.md

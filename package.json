@@ -1,0 +1,55 @@
+{
+  "name": "prestart",
+  "version": "1.0.0",
+  "description": "PreStart Lite: daily vehicle pre-start checks and a defect workflow for small fleets, on Cloudflare Workers.",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/styles/input.css -o ./public/styles.css --minify",
+    "dev": "npm run build:css && wrangler d1 migrations apply DB --local && wrangler dev",
+    "deploy": "npm run build:css && wrangler d1 migrations apply DB --remote && wrangler deploy",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "seed:local": "node scripts/seed.ts --local",
+    "seed:remote": "node scripts/seed.ts --remote",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p e2e && tsc --noEmit -p scripts",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:e2e": "npm run build:css && playwright test",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "dependencies": {
+    "better-auth": "^1.7.22",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.18",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.1",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/cli": "^4.3.5",
+    "@types/node": "^26.6.6",
+    "@vitest/runner": "^4.1.12",
+    "@vitest/snapshot": "^4.1.12",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^10.14.0",
+    "prettier": "^3.10.1",
+    "tailwindcss": "^4.3.5",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.72.2",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.161.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "workerd": true,
+    "@parcel/watcher": false
+  }
+}
