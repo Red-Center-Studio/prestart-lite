@@ -53,7 +53,8 @@ export function createAuth(env: Bindings, origin: string) {
     throw new Error("AUTH_SECRET is missing or shorter than 32 characters. See SETUP.md, step 4.");
   }
   // The example placeholders are public. They are accepted on your own computer only, never on a live address.
-  if (PUBLIC_PLACEHOLDER_SECRETS.includes(env.AUTH_SECRET) && !isLocalOrigin(origin)) {
+  // Compared without surrounding whitespace: a pasted value often carries a stray space or line ending.
+  if (PUBLIC_PLACEHOLDER_SECRETS.includes(env.AUTH_SECRET.trim()) && !isLocalOrigin(origin)) {
     throw new Error("AUTH_SECRET is still the example placeholder. Set a long random value. See SETUP.md, step 4.");
   }
   const baseURL = appOrigin(env, origin);

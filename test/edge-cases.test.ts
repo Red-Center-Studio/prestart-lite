@@ -205,6 +205,10 @@ describe("hostile edge cases", () => {
       expect(() => createAuth(example, "https://prestart.someone.workers.dev")).toThrow(/placeholder/);
       expect(() => createAuth(example, "http://localhost:8787")).not.toThrow();
       expect(() => createAuth(example, "http://127.0.0.1:8791")).not.toThrow();
+      for (const padded of [`${placeholder}\r\n`, `${placeholder}\n`, ` ${placeholder} `]) {
+        const sloppy = { ...env, AUTH_SECRET: padded } as unknown as Bindings;
+        expect(() => createAuth(sloppy, "https://fleet.example.com")).toThrow(/placeholder/);
+      }
     }
   });
 
