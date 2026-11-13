@@ -3,7 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { type Bindings, isOn } from "../env";
 import { getDb } from "../db/client";
 import { account, session, user, verification } from "../db/schema";
-import { sendEmail } from "../lib/email";
+import { businessName, emailButton, sendEmail, senderName } from "../lib/email";
 import { escapeHtml } from "../lib/text";
 import { hashPassword, verifyPassword } from "./password";
 
@@ -96,12 +96,8 @@ export function createAuth(env: Bindings, origin: string) {
       resetPasswordTokenExpiresIn: 60 * 60,
       password: { hash: hashPassword, verify: verifyPassword },
       sendResetPassword: async ({ user: u, url }) => {
-        await sendEmail(env, {
-          to: u.email,
-          subject: "Reset your PreStart password",
-          text: `Hi ${u.name},\n\nOpen this link to choose a new password. It works for 1 hour.\n\n${url}\n\nIf you did not ask for this, you can ignore this email.`,
-          html: `<p>Hi ${escapeHtml(u.name)},</p><p>Open this link to choose a new password. It works for 1 hour.</p><p><a href="${escapeHtml(url)}">Choose a new password</a></p><p>If you did not ask for this, you can ignore this email.</p>`,
-        });
+        const m = resetEmail(senderName(await businessName(env)), new URL(baseURL).host, u.name, url);
+        await sendEmail(env, { to: u.email, ...m });
       },
     },
     emailVerification: {
@@ -109,12 +105,8 @@ export function createAuth(env: Bindings, origin: string) {
       autoSignInAfterVerification: true,
       expiresIn: 60 * 60 * 24,
       sendVerificationEmail: async ({ user: u, url }) => {
-        await sendEmail(env, {
-          to: u.email,
-          subject: "Confirm your email for PreStart",
-          text: `Hi ${u.name},\n\nOpen this link to confirm your email address:\n\n${url}\n\nIf you did not sign up, you can ignore this email.`,
-          html: `<p>Hi ${escapeHtml(u.name)},</p><p><a href="${escapeHtml(url)}">Confirm your email address</a></p><p>If you did not sign up, you can ignore this email.</p>`,
-        });
+        const m = verifyEmail(senderName(await businessName(env)), new URL(baseURL).host, u.name, url);
+        await sendEmail(env, { to: u.email, ...m });
       },
     },
     databaseHooks: {
@@ -131,3 +123,22 @@ export function createAuth(env: Bindings, origin: string) {
 }
 
 export type Auth = ReturnType<typeof createAuth>;
+
+/** Where the account lives, in words: "Acme's PreStart (checks.acme.com)", or "PreStart (...)" with no name set. */
+const place = (name: string, host: string) => `${name === "PreStart" ? "PreStart" : `${name}'s PreStart`} (${host})`;
+
+export function resetEmail(name: string, host: string, person: string, url: string) {
+  return {
+    subject: name === "PreStart" ? "Reset your PreStart password" : `Reset your password for ${name}`,
+    text: `Hi ${person},\n\nSomeone asked to reset the password for your account on ${place(name, host)}. Open this link to choose a new password. It works for 1 hour.\n\n${url}\n\nIf you did not ask for this, you can ignore this email. Your password stays the same.`,
+    html: `<p>Hi ${escapeHtml(person)},</p><p>Someone asked to reset the password for your account on ${escapeHtml(place(name, host))}. The link works for 1 hour.</p>${emailButton(url, "Choose a new password")}<p>If you did not ask for this, you can ignore this email. Your password stays the same.</p>`,
+  };
+}
+
+export function verifyEmail(name: string, host: string, person: string, url: string) {
+  return {
+    subject: name === "PreStart" ? "Confirm your email for PreStart" : `Confirm your email for ${name}`,
+    text: `Hi ${person},\n\nThanks for signing up to ${place(name, host)}. Open this link to confirm your email address. It works for 24 hours.\n\n${url}\n\nAfter that, an admin gives you access. If you did not sign up, you can ignore this email.`,
+    html: `<p>Hi ${escapeHtml(person)},</p><p>Thanks for signing up to ${escapeHtml(place(name, host))}. The link works for 24 hours.</p>${emailButton(url, "Confirm your email address")}<p>After that, an admin gives you access. If you did not sign up, you can ignore this email.</p>`,
+  };
+}
