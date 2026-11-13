@@ -1,3 +1,6 @@
-# Copy this file to .dev.vars for local development. .dev.vars is never committed.
-# Any long random string works locally. Production uses `npx wrangler secret put AUTH_SECRET`.
-AUTH_SECRET=local-development-secret-change-me-0123456789abcdef
+# Secrets for PreStart. Copy this file to .dev.vars for local development (.dev.vars is never committed).
+#
+# AUTH_SECRET signs sign-in sessions. Use a long random string of at least 32 characters.
+# The placeholder below only works on your own computer (localhost); the live app refuses to start with it.
+# Make a real one with:  openssl rand -hex 32
+AUTH_SECRET=replace-me-with-a-long-random-string-of-32-or-more-characters

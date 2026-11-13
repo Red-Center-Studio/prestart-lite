@@ -7,6 +7,11 @@ Drivers tick a checklist on their phone before they drive. Anything that fails g
 critical fault takes the vehicle off the road until the workshop marks it fixed. Every check is kept, with who, when
 and exactly what was ticked, ready for safety audits and insurers.
 
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Red-Center-Studio/prestart-lite)
+
+**[Try the live demo](https://prestart.redcenterstudio.com)** (one-click sign-in, resets nightly) ·
+**[PreStart product page](https://redcenterstudio.com/prestart/)** (Lite, Pro and done-for-you setup)
+
 | Daily check (phone)                                   | Defect queue (phone)                                         |
 | ----------------------------------------------------- | ------------------------------------------------------------ |
 | ![Daily check form](docs/screenshots/check-phone.png) | ![Workshop defect queue](docs/screenshots/defects-phone.png) |
@@ -39,8 +44,12 @@ and exactly what was ticked, ready for safety audits and insurers.
 
 ## Get started
 
-Follow **[SETUP.md](SETUP.md)**. It is written for people who have never deployed code: about 20 minutes from
-download to your own live PreStart.
+**Fastest:** click **Deploy to Cloudflare** above. Cloudflare copies this repository into your GitHub account,
+creates the database and photo storage, asks you for one secret (`AUTH_SECRET`: paste a long random string, at least 32
+characters) and deploys it. Open the address it gives you and create the first account: it becomes the Admin.
+
+**Step by step:** follow **[SETUP.md](SETUP.md)**. It is written for people who have never deployed code: about 20
+minutes from download to your own live PreStart.
 
 Short version for developers:
 
@@ -48,7 +57,8 @@ Short version for developers:
 npm install
 npx wrangler login
 npx wrangler secret put AUTH_SECRET
-npm run deploy
+npm run build:css && npx wrangler deploy   # first time only: creates the database and photo bucket
+npm run deploy                             # applies migrations, then deploys
 ```
 
 Then open the address it prints and create the first account (it becomes the Admin).
@@ -69,7 +79,8 @@ The Pro edition adds the features bigger fleets ask for:
 - Offline checks that send themselves when signal returns
 - Region settings: kilometres or miles, date format, "Rego" or "Plate"
 
-Get Pro, or have it set up for you, at [redcenterstudio.com](https://redcenterstudio.com/).
+Pro is coming soon. Get notified, or have PreStart set up for you, at
+[redcenterstudio.com/prestart](https://redcenterstudio.com/prestart/).
 
 ## Development
 

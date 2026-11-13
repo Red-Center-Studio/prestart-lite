@@ -28,6 +28,21 @@ export async function promoteFirstUser(d1: D1Database, userId: string): Promise<
   return (res.meta.changes ?? 0) > 0;
 }
 
+/** Example values that ship in .dev.vars.example (now or in earlier versions). Anyone can read them. */
+export const PUBLIC_PLACEHOLDER_SECRETS = [
+  "replace-me-with-a-long-random-string-of-32-or-more-characters",
+  "local-development-secret-change-me-0123456789abcdef",
+];
+
+export function isLocalOrigin(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname;
+    return host === "localhost" || host === "127.0.0.1" || host === "[::1]" || host.endsWith(".localhost");
+  } catch {
+    return false;
+  }
+}
+
 /** The address used in email links: APP_URL if set, otherwise the address the request came in on. */
 export const appOrigin = (env: Bindings, requestOrigin: string): string =>
   env.APP_URL ? env.APP_URL.replace(/\/+$/, "") : requestOrigin;
@@ -36,6 +51,10 @@ export function createAuth(env: Bindings, origin: string) {
   // Refuse to run with a missing or weak secret rather than sign sessions with something guessable.
   if (!env.AUTH_SECRET || env.AUTH_SECRET.length < 32) {
     throw new Error("AUTH_SECRET is missing or shorter than 32 characters. See SETUP.md, step 4.");
+  }
+  // The example placeholders are public. They are accepted on your own computer only, never on a live address.
+  if (PUBLIC_PLACEHOLDER_SECRETS.includes(env.AUTH_SECRET) && !isLocalOrigin(origin)) {
+    throw new Error("AUTH_SECRET is still the example placeholder. Set a long random value. See SETUP.md, step 4.");
   }
   const baseURL = appOrigin(env, origin);
   const requireVerification = isOn(env.REQUIRE_EMAIL_VERIFICATION);

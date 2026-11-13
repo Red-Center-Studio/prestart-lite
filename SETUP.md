@@ -5,6 +5,21 @@ developer. Each command is explained in plain words. Expect it to take about 20 
 
 Everything runs in **your own Cloudflare account**, on the free plan, for a small fleet.
 
+## The quickest way: the Deploy to Cloudflare button
+
+If you have a Cloudflare account and a GitHub account, you can skip most of this guide:
+
+1. Click **Deploy to Cloudflare** at the top of the README.
+2. Sign in to Cloudflare and connect GitHub when asked. Cloudflare copies PreStart into a new repository in your
+   GitHub account and creates the database and photo storage for you.
+3. When it asks for **AUTH_SECRET**, paste a long random string of at least 32 characters (see Step 4 below for a
+   one-line way to make one). Do not keep the example value: PreStart refuses to start with it.
+4. Click **Create and deploy** and wait a few minutes. Open the address it shows and create your account. The first
+   account becomes the Admin. Then carry on from Step 6 below.
+
+Every change you push to that GitHub repository deploys automatically. The rest of this guide is the manual way, which
+gives you a copy on your own computer as well.
+
 ## What you need
 
 1. **A Cloudflare account.** Free. Sign up at [dash.cloudflare.com](https://dash.cloudflare.com/sign-up).

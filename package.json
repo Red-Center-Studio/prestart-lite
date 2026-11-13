@@ -9,6 +9,7 @@
     "node": ">=22.18"
   },
   "scripts": {
+    "build": "npm run build:css",
     "build:css": "tailwindcss -i ./src/styles/input.css -o ./public/styles.css --minify",
     "dev": "npm run build:css && wrangler d1 migrations apply DB --local && wrangler dev",
     "deploy": "npm run build:css && wrangler d1 migrations apply DB --remote && wrangler deploy",
@@ -46,6 +47,19 @@
     "typescript-eslint": "^8.72.2",
     "vitest": "^4.1.12",
     "wrangler": "^4.161.0"
+  },
+  "cloudflare": {
+    "bindings": {
+      "AUTH_SECRET": {
+        "description": "Signs sign-in sessions. Paste a long random string of **at least 32 characters** (for example the output of `openssl rand -hex 32`). Do not reuse the example value: the app refuses to start with it."
+      },
+      "DB": {
+        "description": "Stores vehicles, checklists, checks, defects and accounts."
+      },
+      "PHOTOS": {
+        "description": "Private storage for check and defect photos. Never public."
+      }
+    }
   },
   "allowScripts": {
     "esbuild": true,

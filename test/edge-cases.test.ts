@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { check, checklistItem, defect, user, vehicle } from "../src/db/schema";
-import { createAuth } from "../src/auth/auth";
+import { createAuth, PUBLIC_PLACEHOLDER_SECRETS } from "../src/auth/auth";
 import { resetDemo } from "../src/services/demo";
 import { addStandardChecklist, deleteVehicle, moveChecklistItem, listChecklist } from "../src/services/fleet";
 import { submitCheck } from "../src/services/checks";
@@ -196,6 +196,16 @@ describe("hostile edge cases", () => {
   it("refuses to start without a strong AUTH_SECRET", () => {
     const weak = { ...env, AUTH_SECRET: "short" } as unknown as Bindings;
     expect(() => createAuth(weak, "https://x.test")).toThrow(/AUTH_SECRET/);
+  });
+
+  it("refuses the public example secret on a live address, but allows it on localhost", () => {
+    for (const placeholder of PUBLIC_PLACEHOLDER_SECRETS) {
+      const example = { ...env, AUTH_SECRET: placeholder } as unknown as Bindings;
+      expect(() => createAuth(example, "https://fleet.example.com")).toThrow(/placeholder/);
+      expect(() => createAuth(example, "https://prestart.someone.workers.dev")).toThrow(/placeholder/);
+      expect(() => createAuth(example, "http://localhost:8787")).not.toThrow();
+      expect(() => createAuth(example, "http://127.0.0.1:8791")).not.toThrow();
+    }
   });
 
   it("does not reveal whether an email has an account when asking for a reset", async () => {
