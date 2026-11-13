@@ -119,7 +119,7 @@ async function page(c: Context<AppEnv>, error?: string, status: 200 | 400 | 409 
           <summary class="cursor-pointer font-semibold">Recently fixed</summary>
           <ul class="mt-3 space-y-2">
             {fixed.map((d) => (
-              <li class="rounded-2xl border border-gray-200 bg-white p-4">
+              <li class="rounded-2xl border border-line bg-white shadow-sm p-4">
                 <div class="flex flex-wrap items-center gap-2">
                   <SeverityBadge severity={d.severity} />
                   <span class="font-semibold">{d.vehicleName}</span>

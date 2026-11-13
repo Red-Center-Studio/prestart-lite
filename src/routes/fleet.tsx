@@ -146,19 +146,18 @@ async function listPage(c: Context<AppEnv>) {
     c,
     { title: "Fleet", active: "fleet" },
     <>
-      <div class="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 class="text-2xl font-bold tracking-tight">Fleet</h1>
-          <p class="mt-1 text-gray-600">
-            {vehicles.length} {vehicles.length === 1 ? "vehicle" : "vehicles"}
-          </p>
-        </div>
-        {admin ? (
-          <a href="/fleet/new" class={btn("primary")} data-open-dialog="dialog-new">
-            Add vehicle
-          </a>
-        ) : null}
-      </div>
+      <H1
+        sub={`${vehicles.length} ${vehicles.length === 1 ? "vehicle" : "vehicles"}`}
+        action={
+          admin ? (
+            <a href="/fleet/new" class={btn("accent")} data-open-dialog="dialog-new">
+              Add vehicle
+            </a>
+          ) : undefined
+        }
+      >
+        Fleet
+      </H1>
       {msg ? <Alert tone="success">{msg}</Alert> : null}
       {vehicles.length === 0 ? (
         <Empty>{admin ? "No vehicles yet. Add your first one." : "No vehicles yet. An admin can add them."}</Empty>

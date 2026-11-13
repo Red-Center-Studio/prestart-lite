@@ -18,6 +18,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
     "seed:local": "node scripts/seed.ts --local",
     "seed:remote": "node scripts/seed.ts --remote",
+    "screenshots": "node scripts/screenshots.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p e2e && tsc --noEmit -p scripts",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

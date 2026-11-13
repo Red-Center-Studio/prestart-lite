@@ -37,10 +37,10 @@ authRoutes.get("/", async (c) => {
     c,
     { title: "Daily vehicle checks" },
     <>
-      <div class="py-4 sm:py-8">
-        <p class="text-sm font-semibold uppercase tracking-wide text-primary">{settings.businessName}</p>
+      <div class="mb-5 rounded-3xl bg-navy px-5 py-7 text-white shadow-lg sm:px-8 sm:py-10">
+        <p class="text-sm font-semibold uppercase tracking-wide text-accent">{settings.businessName}</p>
         <h1 class="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">Daily pre-start checks, done in a minute.</h1>
-        <p class="mt-3 text-lg text-gray-700">
+        <p class="mt-3 text-lg text-navy-200">
           Drivers tick the checklist before they drive. Problems go straight to the workshop. Unsafe vehicles come off
           the road until they are fixed.
         </p>
@@ -52,7 +52,7 @@ authRoutes.get("/", async (c) => {
           ["Defect queue", "The workshop sees every fault, critical ones first."],
           ["Full history", "Every check is saved with who, when and what was ticked."],
         ].map(([title, text]) => (
-          <li class="rounded-2xl border border-gray-200 bg-white p-4">
+          <li class="rounded-2xl border border-line bg-white shadow-sm p-4">
             <p class="font-semibold">{title}</p>
             <p class="mt-1 text-sm text-gray-600">{text}</p>
           </li>

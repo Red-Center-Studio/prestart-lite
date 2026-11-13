@@ -40,14 +40,14 @@ export const Page: FC<PageProps> = ({ title, user, active, businessName, csrf, d
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-        <meta name="theme-color" content="#0c29ab" />
+        <meta name="theme-color" content="#0a1840" />
         <meta name="robots" content="noindex" />
         <title>{`${title} | ${businessName ?? words.appName}`}</title>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/styles.css" />
         <script src="/app.js" defer></script>
       </head>
-      <body class="min-h-dvh bg-gray-50 text-ink antialiased">
+      <body class="min-h-dvh bg-canvas text-ink antialiased">
         <a
           href="#main"
           class="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:rounded focus:bg-white focus:px-3 focus:py-2"
@@ -55,7 +55,7 @@ export const Page: FC<PageProps> = ({ title, user, active, businessName, csrf, d
           Skip to content
         </a>
         {demo ? (
-          <div class="bg-alert-50 px-4 py-2 text-center text-sm text-ink">
+          <div class="bg-accent px-4 py-2 text-center text-sm font-medium text-navy">
             Demo mode. Anything you change is wiped every night.
           </div>
         ) : null}
@@ -77,16 +77,16 @@ const Header: FC<{
 }> = ({ user, active, businessName, csrf }) => {
   const links = user && user.role ? NAV.filter((l) => l.show(user)) : [];
   return (
-    <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 backdrop-blur">
+    <header class="sticky top-0 z-40 bg-navy text-white shadow-md">
       <div class="mx-auto flex max-w-3xl items-center justify-between gap-3 px-4 py-3">
-        <a href="/" class="flex min-w-0 items-center gap-2 font-semibold text-ink">
+        <a href="/" class="flex min-w-0 items-center gap-2 font-semibold text-white">
           <Logo />
           <span class="truncate">{businessName ?? words.appName}</span>
         </a>
         {user ? (
           <form method="post" action="/logout" class="shrink-0">
             <input type="hidden" name={CSRF_FIELD} value={csrf} />
-            <button type="submit" class="rounded-lg px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+            <button type="submit" class="rounded-lg px-3 py-2 text-sm text-navy-200 hover:bg-white/10 hover:text-white">
               Sign out
             </button>
           </form>
@@ -102,8 +102,8 @@ const Header: FC<{
                   aria-current={active === l.key ? "page" : undefined}
                   class={
                     active === l.key
-                      ? "block whitespace-nowrap rounded-lg bg-primary-100 px-1 py-2.5 text-center text-[13px] font-semibold text-primary sm:px-3 sm:text-sm"
-                      : "block whitespace-nowrap rounded-lg px-1 py-2.5 text-center text-[13px] text-gray-700 hover:bg-gray-100 sm:px-3 sm:text-sm"
+                      ? "block whitespace-nowrap rounded-lg border-b-2 border-accent bg-white/15 px-1 py-2.5 text-center text-[13px] font-semibold text-white sm:px-3 sm:text-sm"
+                      : "block whitespace-nowrap rounded-lg border-b-2 border-transparent px-1 py-2.5 text-center text-[13px] text-navy-200 hover:bg-white/10 hover:text-white sm:px-3 sm:text-sm"
                   }
                 >
                   {l.label}
@@ -124,12 +124,12 @@ const Header: FC<{
 
 export const Logo: FC = () => (
   <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" class="shrink-0">
-    <rect width="32" height="32" rx="8" fill="#0c29ab" />
+    <rect width="32" height="32" rx="8" fill="#f5b301" />
     <path
       d="M9 16.5l4.5 4.5L23 11.5"
       fill="none"
-      stroke="#fff"
-      stroke-width="3"
+      stroke="#0a1840"
+      stroke-width="3.5"
       stroke-linecap="round"
       stroke-linejoin="round"
     />

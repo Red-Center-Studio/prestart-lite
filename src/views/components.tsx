@@ -5,23 +5,29 @@ import { defectStatusLabel, severityLabel, vehicleStatusLabel } from "../labels"
 
 export const Csrf: FC<{ token: string }> = ({ token }) => <input type="hidden" name={CSRF_FIELD} value={token} />;
 
-export const H1: FC<{ children?: Child; sub?: string | undefined }> = ({ children, sub }) => (
-  <div class="mb-5">
-    <h1 class="text-2xl font-bold tracking-tight">{children}</h1>
-    {sub ? <p class="mt-1 text-gray-600">{sub}</p> : null}
+/** Page title banner. `action` is an optional button shown on the right, such as "Add vehicle". */
+export const H1: FC<{ children?: Child; sub?: string | undefined; action?: Child }> = ({ children, sub, action }) => (
+  <div class="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-navy-800 px-5 py-4 text-white shadow-md">
+    <div class="min-w-0">
+      <h1 class="text-2xl font-bold tracking-tight">{children}</h1>
+      {sub ? <p class="mt-1 text-navy-200">{sub}</p> : null}
+    </div>
+    {action ?? null}
   </div>
 );
 
 export const Card: FC<{ children?: Child; class?: string; id?: string }> = (props) => (
   <section
     id={props.id}
-    class={`rounded-2xl border border-gray-200 bg-white p-4 shadow-sm sm:p-5 ${props.class ?? ""}`}
+    class={`rounded-2xl border border-line bg-white p-4 shadow-md shadow-navy/5 sm:p-5 ${props.class ?? ""}`}
   >
     {props.children}
   </section>
 );
 
-export const H2: FC<{ children?: Child }> = ({ children }) => <h2 class="mb-3 text-lg font-semibold">{children}</h2>;
+export const H2: FC<{ children?: Child }> = ({ children }) => (
+  <h2 class="mb-3 border-l-4 border-accent pl-3 text-lg font-bold text-navy">{children}</h2>
+);
 
 type Tone = "info" | "success" | "error" | "warning";
 const toneClass: Record<Tone, string> = {
@@ -126,12 +132,13 @@ export const TextArea: FC<{
   );
 };
 
-type ButtonKind = "primary" | "secondary" | "danger" | "ghost";
+type ButtonKind = "primary" | "secondary" | "danger" | "ghost" | "accent";
 const buttonClass: Record<ButtonKind, string> = {
   primary: "bg-primary text-white hover:bg-primary-dark",
   secondary: "border border-gray-300 bg-white text-ink hover:bg-gray-50",
   danger: "border border-danger-200 bg-white text-danger hover:bg-danger-50",
   ghost: "text-primary hover:bg-primary-50",
+  accent: "bg-accent text-navy hover:bg-accent-dark hover:text-white",
 };
 
 export const btn = (kind: ButtonKind = "primary", extra = "") =>
@@ -159,8 +166,8 @@ export const Button: FC<{
 );
 
 const severityTone: Record<Severity, string> = {
-  minor: "bg-gray-100 text-gray-800",
-  major: "bg-alert-100 text-ink",
+  minor: "bg-slate-200 text-slate-800",
+  major: "bg-accent text-navy",
   critical: "bg-danger text-white",
 };
 export const SeverityBadge: FC<{ severity: Severity }> = ({ severity }) => (
@@ -197,5 +204,5 @@ export const PassBadge: FC<{ passed: boolean }> = ({ passed }) => (
 );
 
 export const Empty: FC<{ children?: Child }> = ({ children }) => (
-  <div class="rounded-2xl border border-dashed border-gray-300 bg-white p-6 text-center text-gray-600">{children}</div>
+  <div class="rounded-2xl border-2 border-dashed border-line bg-white/70 p-6 text-center text-gray-700">{children}</div>
 );
