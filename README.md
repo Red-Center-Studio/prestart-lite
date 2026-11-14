@@ -10,8 +10,9 @@ check is kept, with who, when and every answer, ready for safety audits and insu
 
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Red-Center-Studio/prestart-lite)
 
-**[Try the live demo](https://prestart.redcenterstudio.com)** (one-click sign-in, resets nightly) ·
-**[PreStart product page](https://redcenterstudio.com/prestart/)** (Lite, Pro and done-for-you setup)
+[Live demo](https://prestart.redcenterstudio.com) · [Get Pro](https://redcenterstudio.com/prestart/) · [Docs](SETUP.md)
+
+The live demo has one-click sign-in and resets nightly.
 
 | Daily check (phone)                                   | Defect queue (phone)                                         |
 | ----------------------------------------------------- | ------------------------------------------------------------ |
@@ -19,7 +20,7 @@ check is kept, with who, when and every answer, ready for safety audits and insu
 
 ![Fleet page with due dates](docs/screenshots/fleet-desktop.png)
 
-## What it does
+## What Lite does
 
 - **Daily checks in under a minute.** Pick the vehicle, enter the odometer, mark each item Pass, Fail or N/A (or
   "All pass"). A failed item asks what is wrong, how serious it is, and takes up to 3 photos.
@@ -50,7 +51,7 @@ check is kept, with who, when and every answer, ready for safety audits and insu
 - **Tested.** Unit tests run inside the real Workers runtime against a real local database, covering every permission
   rule and every business rule. End-to-end tests drive a real browser at desktop and phone sizes.
 
-## Get started
+## Deploy in 5 minutes
 
 **Fastest:** click **Deploy to Cloudflare** above. Cloudflare copies this repository into your GitHub account,
 creates the database and photo storage, asks you for one secret (`AUTH_SECRET`: paste a long random string, at least 32
@@ -76,19 +77,36 @@ Then open the address it prints and create the first account (it becomes the Adm
 See **[CUSTOMISING.md](CUSTOMISING.md)** for renaming roles and statuses, changing the standard checklist, colours,
 time zone, email provider and permissions.
 
-## PreStart Pro
+## What Pro adds
 
-The Pro edition adds the features bigger fleets ask for:
-
-- QR code stickers per vehicle that open the check with the vehicle already picked
-- Instant email to the workshop and admins when a critical defect is reported
-- Daily email reminders before rego and service are due
-- CSV export of checks and defects for audits and insurers
-- Offline checks that send themselves when signal returns
-- Region settings: kilometres or miles, date format, "Rego" or "Plate"
-
-Pro is coming soon. Get notified, or have PreStart set up for you, at
+PreStart Pro is $149 USD once for one business, with no monthly fee. You get the Pro code on GitHub, a licence and a
+setup guide by email, and it runs in your own Cloudflare account like Lite. See
 [redcenterstudio.com/prestart](https://redcenterstudio.com/prestart/).
+
+| Feature                                                                      | Lite         | Pro           |
+| ---------------------------------------------------------------------------- | ------------ | ------------- |
+| Price                                                                        | Free, MIT    | $149 USD once |
+| Daily checks with Pass, Fail or N/A and photos for each fault                | Yes          | Yes           |
+| Clear next steps for drivers, defect queue and the off-road rule             | Yes          | Yes           |
+| Ready-made checklists, fleet list, history and roles                         | Yes          | Yes           |
+| Checklists per vehicle type, so forklifts get forklift questions             | No           | Yes           |
+| Driver declaration with typed name and finger signature                      | No           | Yes           |
+| Engine hours for forklifts and plant, and fuel level on every check          | No           | Yes           |
+| Today board: which vehicles have been checked, and which still need chasing  | No           | Yes           |
+| Email when a vehicle has not been checked by a set time                      | No           | Yes           |
+| Assign defects to the workshop with a fix-by date                            | No           | Yes           |
+| Instant email when a critical fault is reported                              | No           | Yes           |
+| Printable check reports and CSV export for audits and insurers               | No           | Yes           |
+| Checks that save offline and send when signal returns                        | No           | Yes           |
+| QR code stickers, location stamps, reminders before rego and service are due | No           | Yes           |
+| Where your data lives                                                        | Your account | Your account  |
+
+## Need it set up for you?
+
+The Turnkey Setup installs PreStart in your own Cloudflare account, with your business name, vehicles, checklist and first team
+members set up. $499 USD, paid once.
+[Book the Turnkey Setup](https://redcenterstudio.com/start/?package=Turnkey%20Setup%20Sprint&for=prestart), or read
+more on the [PreStart page](https://redcenterstudio.com/prestart/).
 
 ## Development
 
@@ -115,6 +133,8 @@ test/               unit and route tests (Workers runtime, real local D1)
 e2e/                Playwright end-to-end tests
 ```
 
-## License
+## Licence: MIT
 
-MIT. See [LICENSE](LICENSE).
+Free to use, change and share, for any business. See [LICENSE](LICENSE).
+
+Built by Red Center Studio, [redcenterstudio.com](https://redcenterstudio.com)
